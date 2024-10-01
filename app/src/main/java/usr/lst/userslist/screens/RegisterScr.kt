@@ -1,15 +1,23 @@
 package usr.lst.userslist.screens
 
+import android.graphics.BitmapFactory
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.RemoveRedEye
 import androidx.compose.material3.Button
 import androidx.compose.material3.DatePicker
@@ -30,17 +38,25 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.painter.BitmapPainter
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.core.net.toFile
+import androidx.core.net.toUri
+import androidx.documentfile.provider.DocumentFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import usr.lst.userslist.db.MyState
 import usr.lst.userslist.db.QuUser
 import usr.lst.userslist.db.QuUserDatabase
+import java.io.File
 import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneId
@@ -57,9 +73,26 @@ fun RegisterScr(modifier: Modifier = Modifier, back: () -> Unit, toMain: () -> U
     var name by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
     var birthDay by rememberSaveable { mutableStateOf("") }
+    var uriStr by rememberSaveable { mutableStateOf<String?>(null) }
     val datePickerState = rememberDatePickerState()
     var showDatePicker by rememberSaveable { mutableStateOf(false) }
     var pwdVisibility by rememberSaveable { mutableStateOf(false) }
+    val galleryLauncher =
+        rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+            if (uri != null) {
+                val picFileName = DocumentFile.fromSingleUri(ctx,uri)?.name
+                if(picFileName!=null) {
+                    val picFile = File(ctx.filesDir, picFileName)
+                    ctx.contentResolver.openInputStream(uri)?.use { iStream ->
+                        picFile.outputStream().use { oStream ->
+                            iStream.copyTo(oStream)
+                        }
+                    }
+                    uriStr=picFile.toUri().toString()
+                }
+
+            }
+        }
 
     BackHandler(onBack = back)
 
@@ -92,6 +125,28 @@ fun RegisterScr(modifier: Modifier = Modifier, back: () -> Unit, toMain: () -> U
         Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
         Alignment.CenterHorizontally,
     ) {
+
+        IconButton(
+            {
+                galleryLauncher.launch("image/*")
+            },
+        ) {
+            if (uriStr == null) {
+                Icon(Icons.Default.Person, "choose photo")
+            } else {
+                Image(
+                    BitmapPainter(
+                        BitmapFactory.decodeStream(
+                            ctx.contentResolver.openInputStream((uriStr?:"").toUri()))
+                            .asImageBitmap(),
+                    ),
+                    "Photo",
+                    Modifier.clip(CircleShape),
+                    contentScale = ContentScale.Crop,
+                )
+            }
+        }
+
         OutlinedTextField(
             name,
             { name = it },
@@ -149,13 +204,19 @@ fun RegisterScr(modifier: Modifier = Modifier, back: () -> Unit, toMain: () -> U
                     Toast.makeText(ctx, "wrong data", Toast.LENGTH_LONG).show()
                     return@Button
                 }
-                val u =  QuUser(
-                    0, name, password, birthDay, LocalDateTime.now().format(
-                        DateTimeFormatter.ofPattern("uuuu-MM-dd HH:mm:ss"))
+                val u = QuUser(
+                    0,
+                    name,
+                    password,
+                    birthDay,
+                    LocalDateTime.now().format(
+                        DateTimeFormatter.ofPattern("uuuu-MM-dd HH:mm:ss")
+                    ),
+                    uriStr,
                 )
                 scope.launch(Dispatchers.IO) {
                     QuUserDatabase.getDataBase(ctx).quUserDao().insertAll(u)
-                    MyState.saveLoggedInName(u,ctx)
+                    MyState.saveLoggedInName(u, ctx)
                 }
                 //MyState.loggedUser.value=u
             },

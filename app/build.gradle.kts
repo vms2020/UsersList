@@ -57,6 +57,7 @@ android {
 }
 
 dependencies {
+    implementation("androidx.documentfile:documentfile:1.0.1")
     implementation("androidx.datastore:datastore-preferences:1.1.1")
     implementation("androidx.compose.material:material-icons-extended:1.7.2")
     implementation("androidx.room:room-runtime:2.6.1")
